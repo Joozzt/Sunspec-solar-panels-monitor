@@ -267,7 +267,7 @@ void MainWindow::readSocketData()
         avgpowercnt++;
 
 
-        double efficiency=avgdcpowerf>0.0? 1000.0*avgpowerf/avgdcpowerf:985.0;
+        double efficiency=avgdcpowerf>50.0? 1000.0*avgpowerf/avgdcpowerf:985.0;
 
         text.append(QString::asprintf("\nCalculated AC Power:%.1f power-factor:%.1f efficiency:%.4f",calc_power,power_factor,efficiency));
         text.append(QString::asprintf("\nAC Power:%.1f DC Current:%.3f DC Voltage:%.1f",powerf,dccurrentf,dcvoltagef));
