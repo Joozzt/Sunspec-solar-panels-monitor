@@ -303,11 +303,12 @@ void MainWindow::readSocketData()
             settings->setValue("Last Date",lastdate);
             settings->setValue("Last Energy",lastenergy);
             settings->setValue("Last Youless Energy",lastyoulessenergy);
-            fn.write("inverter power,inverter energy,youless energy,youless power,AC total current,AC Phase A current,AC Phase B current,AC Phase C current,AC Phase A voltage,AC Phase B voltage,AC Phase C voltage,Powerfactor,time\n");
+            fn.write("inverter power,inverter energy,youless energy,youless power,DC power, DC Current, DC Voltage, AC total current,AC Phase A current,AC Phase B current,AC Phase C current,AC Phase A voltage,AC Phase B voltage,AC Phase C voltage,Powerfactor,time\n");
         }
         int intrahour=dt.time().minute()/5;
 //save data to csv file
         fn.write(QString::asprintf("%d,%d,%d,%d,",(int)powerf,(energy-lastenergy),((int)youlessenergy-lastyoulessenergy),youlesspower).toLatin1());
+        fn.write(QString::asprintf("%f,%f,%f,",dcpowerf,dccurrentf,dcvoltagef).toLatin1());
         fn.write(QString::asprintf("%f,%f,%f,%f,",actotalcurrent,acphaseAcurrent,acphaseBcurrent,acphaseCcurrent).toLatin1());
         fn.write(QString::asprintf("%f,%f,%f,%f,",acphaseAVoltage,acphaseBVoltage,acphaseCVoltage,power_factor).toLatin1());
         fn.write(QString::asprintf("%s\n",times.toLatin1().data()).toLatin1());
