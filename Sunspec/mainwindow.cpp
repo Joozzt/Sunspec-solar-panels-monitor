@@ -147,7 +147,7 @@ void MainWindow::newIPs()
 
 void MainWindow::requestData()
 {
-    unsigned char data[]={0,0,0,0,0,6,0x01,0x03,00,83,0,22};
+    unsigned char data[]={0,0,0,0,0,6,0x01,0x03,00,71,0,34};
     data[0]=(transactionnr>>8)&0xff;
     data[1]=transactionnr&0xff;
     requestingdata=true;
@@ -200,12 +200,13 @@ void MainWindow::onConnectionTerminated()
     qDebug()<<"connection terminated";
 }
 
-float MainWindow::read16bitAndScale(char* buff, int n)
+float MainWindow::read16bitAndScale(char* buff, int n, int scalereg)
 {
     int index=n*2;
+    int scaleoffset=scalereg*2;
     buff+=index;
     int result=(*buff<<8)|(*(buff+1)&0xff);
-    short sf=(*(buff+2)<<8)|(*(buff+3)&0xff);
+    short sf=(*(buff+scaleoffset)<<8)|(*(buff+scaleoffset+1)&0xff);
     return (float)result*pow(10.0,sf);
 }
 
@@ -216,7 +217,7 @@ void MainWindow::readSocketData()
     {
         QByteArray receivedData = sunspecData[sunspecrp];
         sunspecData[sunspecrp]=m_pTcpSocket->readAll();
-        float directpowerf=read16bitAndScale(sunspecData[sunspecrp].data()+9,0);
+        float directpowerf=read16bitAndScale(sunspecData[sunspecrp].data()+9,12);
         sunspecrp++;
         if(sunspecrp>=SUNSPECDATADELAY)sunspecrp=0;
         QString text=ui->label->text();
@@ -229,25 +230,28 @@ void MainWindow::readSocketData()
         qDebug()<<"read:"<<receivedData.length();
         if(receivedData.length()<10)return;
 
-        float powerf=read16bitAndScale(data,0);
-        float dccurrentf=read16bitAndScale(data,13);
-        float voltagef=read16bitAndScale(data,15);
-        float dcpowerf=read16bitAndScale(data,17);
-        float a_power=read16bitAndScale(data,4);
-        float r_power=read16bitAndScale(data,6);
-        float power_factor=read16bitAndScale(data,8);
-        float calc_power=a_power*power_factor/100.0;//a_power>r_power? powf(a_power*a_power-r_power*r_power,0.5):0.0;
+        float actotalcurrent=read16bitAndScale(data,0,4);
+        float acphaseAcurrent=read16bitAndScale(data,1,3);
+        float acphaseBcurrent=read16bitAndScale(data,2,2);
+        float acphaseCcurrent=read16bitAndScale(data,3,1);
+        float acphaseAVoltage=read16bitAndScale(data,8,3);
+        float acphaseBVoltage=read16bitAndScale(data,9,2);
+        float acphaseCVoltage=read16bitAndScale(data,10,1);
+        float powerf=read16bitAndScale(data,12);
+        float dccurrentf=read16bitAndScale(data,25);
+        float dcvoltagef=read16bitAndScale(data,27);
+        float dcpowerf=read16bitAndScale(data,29);
+        float a_power=read16bitAndScale(data,16);
+        float r_power=read16bitAndScale(data,18);
+        float power_factor=read16bitAndScale(data,20);
+        float calc_power=a_power*power_factor*-0.01;//a_power>r_power? powf(a_power*a_power-r_power*r_power,0.5):0.0;
 
-        unsigned int energy=(receivedData.at(20+9)<<24)&0xff000000;
-        energy+=(receivedData.at(21+9)<<16)&0xff0000;
-        energy+=(receivedData.at(22+9)<<8)&0xff00;
-        energy+=(receivedData.at(23+9))&0xff;
+        unsigned int energy=(receivedData.at(44+9)<<24)&0xff000000;
+        energy+=(receivedData.at(45+9)<<16)&0xff0000;
+        energy+=(receivedData.at(46+9)<<8)&0xff00;
+        energy+=(receivedData.at(47+9))&0xff;
 
-        qDebug()<<"power:"<<powerf<<"energy:"<<energy<<"voltage:"<<voltagef<<"DC current:"<<dccurrentf;
-        text.append(QString::asprintf("\nCalculated AC Power:%.1f power-factor:%.1f",calc_power,power_factor));
-        text.append(QString::asprintf("\nAC Power:%.1f DC Current:%.3f DC Voltage:%.1f",powerf,dccurrentf,voltagef));
-        text.append(QString::asprintf("\nDC Power:%.2f Calculated DC power:%.2f",dcpowerf,(dccurrentf*voltagef)));
-        text.append(QString::asprintf("\nYouless energy:%d",youlessenergy));
+        qDebug()<<"power:"<<powerf<<"energy:"<<energy<<"voltage:"<<dcvoltagef<<"DC current:"<<dccurrentf;
         if(powerf>maxpower)
         {
             maxpower=powerf;
@@ -259,11 +263,16 @@ void MainWindow::readSocketData()
             mindcpower=dcpowerf;
         }
         avgpowerf+=powerf;
-        avgdcpowerf+=dcpowerf;
+        avgdcpowerf+=(double)dccurrentf*dcvoltagef;
         avgpowercnt++;
 
 
-        float efficiency=avgdcpowerf>0.0? 100.0*avgpowerf/avgdcpowerf:98.5;
+        double efficiency=avgdcpowerf>0.0? 1000.0*avgpowerf/avgdcpowerf:985.0;
+
+        text.append(QString::asprintf("\nCalculated AC Power:%.1f power-factor:%.1f efficiency:%.4f",calc_power,power_factor,efficiency));
+        text.append(QString::asprintf("\nAC Power:%.1f DC Current:%.3f DC Voltage:%.1f",powerf,dccurrentf,dcvoltagef));
+        text.append(QString::asprintf("\nDC Power:%.2f Calculated DC power:%.2f",dcpowerf,(dccurrentf*dcvoltagef)));
+        text.append(QString::asprintf("\nYouless energy:%d",youlessenergy));
         qDebug()<<"maxpower:"<<maxpower<<"minpower:"<<minpower<<"avgpower:"<<(avgpowerf/avgpowercnt)<<"avg DC power:"<<(avgdcpowerf/avgpowercnt);
         qDebug()<<"maxdcpower:"<<maxdcpower<<"mindcpower:"<<mindcpower;
         qDebug()<<"efficiency:"<<efficiency;
@@ -294,11 +303,14 @@ void MainWindow::readSocketData()
             settings->setValue("Last Date",lastdate);
             settings->setValue("Last Energy",lastenergy);
             settings->setValue("Last Youless Energy",lastyoulessenergy);
-            fn.write("inverter power,inverter energy,youless energy,youless power,time\n");
+            fn.write("inverter power,inverter energy,youless energy,youless power,AC total current,AC Phase A current,AC Phase B current,AC Phase C current,AC Phase A voltage,AC Phase B voltage,AC Phase C voltage,Powerfactor,time\n");
         }
         int intrahour=dt.time().minute()/5;
 //save data to csv file
-        fn.write(QString::asprintf("%d,%d,%d,%d,%s\n",(int)powerf,(energy-lastenergy),((int)youlessenergy-lastyoulessenergy),youlesspower,times.toLatin1().data()).toLatin1());
+        fn.write(QString::asprintf("%d,%d,%d,%d,",(int)powerf,(energy-lastenergy),((int)youlessenergy-lastyoulessenergy),youlesspower).toLatin1());
+        fn.write(QString::asprintf("%f,%f,%f,%f,",actotalcurrent,acphaseAcurrent,acphaseBcurrent,acphaseCcurrent).toLatin1());
+        fn.write(QString::asprintf("%f,%f,%f,%f,",acphaseAVoltage,acphaseBVoltage,acphaseCVoltage,power_factor).toLatin1());
+        fn.write(QString::asprintf("%s\n",times.toLatin1().data()).toLatin1());
         fn.close();
         if(intrahour != lastintrahour && !opt->PVO_systemid.isEmpty())
         {//upload
@@ -308,7 +320,7 @@ void MainWindow::readSocketData()
             url+="&v1=" + QString::number(energy);
             url+="&v2=" + QString::number((int)maxpower);
             url+="&v3=" + QString::number(((int)youlessenergy)+energy);
-            url+="&v6=" + QString::number(voltagef);
+            url+="&v6=" + QString::number(dcvoltagef);
             url+="&v7=" + QString::number((int)maxpower);
             url+="&v8=" + QString::number((int)minpower);
             url+="&v9=" + QString::number((int)(avgpowerf/avgpowercnt));

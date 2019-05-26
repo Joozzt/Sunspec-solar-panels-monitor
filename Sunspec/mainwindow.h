@@ -46,7 +46,7 @@ private:
     unsigned int lastenergy;
     int youlessenergy,lastinteryoulessenergy,lastinterenergy,lastyoulessenergy;
     int maxpower,minpower,avgpowercnt,maxdcpower,mindcpower,youlesspower;
-    float avgpowerf,avgdcpowerf;
+    double avgpowerf,avgdcpowerf;
     int sdp;
     int lastintrahour;
     QSettings *settings;
@@ -58,7 +58,7 @@ private:
     int youlessDelayBuffer[YOULESSBUFFERSIZE];
     int youlesswp;
 
-    float read16bitAndScale(char *buff, int n);
+    float read16bitAndScale(char *buff, int n, int scalereg=1);     //default scalereg=next one
 
 public slots:
 
