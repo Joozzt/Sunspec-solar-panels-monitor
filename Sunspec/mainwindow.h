@@ -46,6 +46,7 @@ private:
     unsigned int lastenergy;
     int youlessenergy,lastinteryoulessenergy,lastinterenergy,lastyoulessenergy;
     int maxpower,minpower,avgpowercnt,maxdcpower,mindcpower,youlesspower;
+    float mindcvoltagef;
     double avgpowerf,avgdcpowerf;
     int sdp;
     int lastintrahour;

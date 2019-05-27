@@ -51,7 +51,7 @@ MainWindow::MainWindow(QWidget *parent) :
     QDateTime dt=QDateTime::currentDateTime();
     lastintrahour=dt.time().minute()/5;
     maxpower=avgpowerf=avgdcpowerf=avgpowercnt=maxdcpower=0;
-    minpower=mindcpower=1000000000;
+    minpower=mindcpower=mindcvoltagef=1000000000;
     sdp=0;
     sunspecrp=youlesswp=0;
     requestingdata=false;
@@ -266,12 +266,13 @@ void MainWindow::readSocketData()
         avgdcpowerf+=(double)dccurrentf*dcvoltagef;
         avgpowercnt++;
 
+        if(dcvoltagef<mindcvoltagef)mindcvoltagef=dcvoltagef;
 
         double efficiency=avgdcpowerf>50.0? 1000.0*avgpowerf/avgdcpowerf:985.0;
 
         text.append(QString::asprintf("\nCalculated AC Power:%.1f power-factor:%.1f efficiency:%.4f",calc_power,power_factor,efficiency));
         text.append(QString::asprintf("\nAC Power:%.1f DC Current:%.3f DC Voltage:%.1f",powerf,dccurrentf,dcvoltagef));
-        text.append(QString::asprintf("\nDC Power:%.2f Calculated DC power:%.2f",dcpowerf,(dccurrentf*dcvoltagef)));
+        text.append(QString::asprintf("\nDC Power:%.2f Calculated DC power:%.2f Min DC Voltage:%f",dcpowerf,(dccurrentf*dcvoltagef),mindcvoltagef));
         text.append(QString::asprintf("\nYouless energy:%d",youlessenergy));
         qDebug()<<"maxpower:"<<maxpower<<"minpower:"<<minpower<<"avgpower:"<<(avgpowerf/avgpowercnt)<<"avg DC power:"<<(avgdcpowerf/avgpowercnt);
         qDebug()<<"maxdcpower:"<<maxdcpower<<"mindcpower:"<<mindcpower;
@@ -321,7 +322,7 @@ void MainWindow::readSocketData()
             url+="&v1=" + QString::number(energy);
             url+="&v2=" + QString::number((int)maxpower);
             url+="&v3=" + QString::number(((int)youlessenergy)+energy);
-            url+="&v6=" + QString::number(dcvoltagef);
+            url+="&v6=" + QString::number(mindcvoltagef);
             url+="&v7=" + QString::number((int)maxpower);
             url+="&v8=" + QString::number((int)minpower);
             url+="&v9=" + QString::number((int)(avgpowerf/avgpowercnt));
@@ -331,7 +332,7 @@ void MainWindow::readSocketData()
             ui->uploadlabel->setText(url+"\n");
             pvoutputReply=manager->get(QNetworkRequest(QUrl(url)));
             maxpower=maxdcpower=avgpowerf=avgdcpowerf=avgpowercnt=0;
-            minpower=mindcpower=1000000000;
+            minpower=mindcpower=mindcvoltagef=1000000000;
             lastinteryoulessenergy=youlessenergy;
             lastinterenergy=energy;
         }
