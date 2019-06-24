@@ -147,7 +147,7 @@ void MainWindow::newIPs()
 
 void MainWindow::requestData()
 {
-    unsigned char data[]={0,0,0,0,0,6,0x01,0x03,00,71,0,34};
+    unsigned char data[]={0,0,0,0,0,6,0x01,0x03,00,71,0,38};
     data[0]=(transactionnr>>8)&0xff;
     data[1]=transactionnr&0xff;
     requestingdata=true;
@@ -241,6 +241,7 @@ void MainWindow::readSocketData()
         float dccurrentf=read16bitAndScale(data,25);
         float dcvoltagef=read16bitAndScale(data,27);
         float dcpowerf=read16bitAndScale(data,29);
+        float hstemp=read16bitAndScale(data,32,3);
         float a_power=read16bitAndScale(data,16);
         float r_power=read16bitAndScale(data,18);
         float power_factor=read16bitAndScale(data,20);
@@ -271,7 +272,7 @@ void MainWindow::readSocketData()
         double efficiency=avgdcpowerf>50.0? 1000.0*avgpowerf/avgdcpowerf:985.0;
 
         text.append(QString::asprintf("\nCalculated AC Power:%.1f power-factor:%.1f efficiency:%.4f",calc_power,power_factor,efficiency));
-        text.append(QString::asprintf("\nAC Power:%.1f DC Current:%.3f DC Voltage:%.1f",powerf,dccurrentf,dcvoltagef));
+        text.append(QString::asprintf("\nAC Power:%.1f DC Current:%.3f DC Voltage:%.2f, heat sink temp:%.1f",powerf,dccurrentf,dcvoltagef,hstemp));
         text.append(QString::asprintf("\nDC Power:%.2f Calculated DC power:%.2f Min DC Voltage:%f",dcpowerf,(dccurrentf*dcvoltagef),mindcvoltagef));
         text.append(QString::asprintf("\nYouless energy:%d",youlessenergy));
         qDebug()<<"maxpower:"<<maxpower<<"minpower:"<<minpower<<"avgpower:"<<(avgpowerf/avgpowercnt)<<"avg DC power:"<<(avgdcpowerf/avgpowercnt);
