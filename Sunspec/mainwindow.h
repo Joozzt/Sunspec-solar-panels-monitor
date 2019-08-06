@@ -50,14 +50,17 @@ private:
     double avgpowerf,avgdcpowerf;
     int sdp;
     int lastintrahour;
+    int WundergroundDelay;
     QSettings *settings;
     QNetworkAccessManager* manager;
     bool requestingdata;
-    QNetworkReply * pvoutputReply,*youlessReply;
+    QNetworkReply * pvoutputReply,*youlessReply,*WundergroundReply;
     QByteArray sunspecData[SUNSPECDATADELAY];
     int sunspecrp;
     int youlessDelayBuffer[YOULESSBUFFERSIZE];
     int youlesswp;
+    float lastradiation;
+    int lastradiationtime;
 
     float read16bitAndScale(char *buff, int n, int scalereg=1);     //default scalereg=next one
 

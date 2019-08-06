@@ -17,6 +17,7 @@ public:
 
     QString YoulessIP,InverterIP;
     QString PVO_systemid,PVO_apikey;
+    QString WundergroundID;
 
 private slots:
     void on_buttonBox_accepted();

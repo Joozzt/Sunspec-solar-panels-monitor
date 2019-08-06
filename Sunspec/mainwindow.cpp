@@ -13,6 +13,7 @@
 #define PVOID "123456"
 #define PVOKEY "0123456789abcdef"
 
+#define WUNDERGROUNDSTATION ""
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -42,6 +43,7 @@ MainWindow::MainWindow(QWidget *parent) :
     opt->InverterIP= settings->value("InverterIP",INVERTER_IP).toString();
     opt->PVO_systemid = settings->value("PVO id",PVOID).toString();
     opt->PVO_apikey = settings->value("PVO key",PVOKEY).toString();
+    opt->WundergroundID = settings->value("WundergroundID",WUNDERGROUNDSTATION).toString();
 
     for(int i=0;i<YOULESSBUFFERSIZE;i++)
     {
@@ -54,6 +56,9 @@ MainWindow::MainWindow(QWidget *parent) :
     minpower=mindcpower=mindcvoltagef=1000000000;
     sdp=0;
     sunspecrp=youlesswp=0;
+    lastradiation=0;
+    lastradiationtime=13*60;//-1;           //not valid yet, take only 1 last time of table
+    WundergroundDelay=0;
     requestingdata=false;
     polltimer=new QTimer(this);
     connect(polltimer,SIGNAL(timeout()),this,SLOT(mytimer()));
@@ -70,6 +75,7 @@ MainWindow::~MainWindow()
     settings->setValue("YoulessIP",opt->YoulessIP);
     settings->setValue("PVO id",opt->PVO_systemid);
     settings->setValue("PVO key",opt->PVO_apikey);
+    settings->setValue("WundergroundID",opt->WundergroundID);
     delete ui;
 }
 
@@ -87,7 +93,102 @@ void MainWindow::sslErrors(QNetworkReply * reply, QList<QSslError> errors)
 
 void MainWindow::replyFinished(QNetworkReply* reply)
 {
-    if(reply->url().toString().contains(opt->YoulessIP))
+    if(reply==WundergroundReply)
+    {
+        if(reply->error()==QNetworkReply::NoError)
+        {
+            QString url=QString::asprintf("https://www.pvoutput.org/service/r2/addbatchstatus.jsp?key=%s&sid=%s&data=",opt->PVO_apikey.toLatin1().data(),opt->PVO_systemid.toLatin1().data());
+            QString batchdata;
+            bool havenewdata=false;
+            float radiation;
+            int hr,min;
+            QByteArray data=reply->readAll();
+            data.append('\0');
+            char* text=data.data();
+            char * p=strstr(text,"history-table desktop-table");
+            if(p)p=strstr(p,"<tbody");
+            if(p)
+            {
+                p=strstr(p,"<tr");
+                while(p)
+                {
+                    p+=3;
+                    char* pnext=strstr(p,"<tr");
+                    if(pnext)
+                    {
+                        *pnext=0;
+                    }
+                    char *m=strstr(p,"AM");
+                    bool pmtime=false;
+                    if(!m)
+                    {
+                        pmtime=true;
+                        m=strstr(p,"PM");
+                    }
+                    if(m)m=strstr(m-10,">");
+                    if(m)
+                    {//found a time
+                        m++;
+                        sscanf_s(m,"%d:%d",&hr,&min);
+                        if(hr>=12)hr-=12;
+                        if(pmtime)hr+=12;
+                    }
+                    char* solar=strstr(p,"w/m")-24;
+                    if(solar)solar=strstr(solar,">");
+                    if(solar)
+                    {
+                        radiation=atof(solar+1);
+//                        qDebug()<<radiation;
+                    }
+                    if(solar&&m)
+                    {
+                        int radiationtime=hr*60+min;
+                        qDebug()<<hr<<min<<radiation;
+                        if(lastradiationtime>0)
+                        {
+                            if(radiationtime>lastradiationtime || (lastradiationtime-radiationtime)>15*60)      //only if new time later than last (or just after midnight)
+                            {
+                                havenewdata=true;
+                                QDateTime dt=QDateTime::currentDateTime();
+                                QString date=dt.toString("yyyyMMdd");
+                                batchdata+=date+",";
+                                batchdata+=QString::asprintf("%02d:%02d,0,,,0,,,,,,,,%f;",hr,min,lastradiation);
+                                lastradiation=radiation;
+                                lastradiationtime=radiationtime;
+                            }
+                        }
+                        else
+                        {
+                            havenewdata=true;
+                        }
+                    }
+                    p=pnext;
+                }
+            }
+//only use last entry of the table, and only if time is later than previous time
+            if(havenewdata)
+            {
+                if(lastradiationtime<0)lastradiationtime=hr*60+min;
+                qDebug()<<"url:"<<url+batchdata;
+                if(batchdata.size())pvoutputReply=manager->get(QNetworkRequest(QUrl(url+batchdata)));
+#if 0
+                int radiationtime=hr*60+min;
+                qDebug()<<hr<<min<<radiation;
+                if(radiationtime>lastradiationtime || (lastradiationtime-radiationtime)>12*60)      //only if new time later than last (or just after midnight)
+                {
+                    lastradiation=radiation;
+                    lastradiationtime=radiationtime;
+                    ui->youless_label->clear();
+                    ui->youless_label->setText(QString::asprintf("solar radiation:%f",lastradiation));
+                }
+#endif
+            }
+        }
+        else {
+            qDebug()<<"WundergroundReply reply error:"<<reply->errorString();
+        }
+    }
+    else if(!opt->YoulessIP.isEmpty() && reply->url().toString().contains(opt->YoulessIP))
     {
         if(reply->error()==QNetworkReply::NoError)
         {
@@ -162,6 +263,20 @@ void MainWindow::requestData()
 
 void MainWindow::mytimer()
 {
+    if(!opt->WundergroundID.isEmpty())
+    {
+        if(WundergroundDelay<=0)
+        {
+            WundergroundDelay=3600;     //set to a value, changed later
+            QDateTime dt=QDateTime::currentDateTime();
+            QString date=dt.toString("yyyy-MM-dd");
+            QString url;
+            url.sprintf("https://www.wunderground.com/dashboard/pws/%s/table/%s/%s/daily",opt->WundergroundID.toLatin1().data(),date.toLatin1().data(),date.toLatin1().data());
+            qDebug()<<url;
+            WundergroundReply=manager->get(QNetworkRequest(QUrl(url)));
+        }
+        WundergroundDelay--;
+    }
     if(!opt->YoulessIP.isEmpty())
     {
         QString url="http://" +opt->YoulessIP ;
@@ -275,6 +390,7 @@ void MainWindow::readSocketData()
         text.append(QString::asprintf("\nAC Power:%.1f DC Current:%.3f DC Voltage:%.2f, heat sink temp:%.1f",powerf,dccurrentf,dcvoltagef,hstemp));
         text.append(QString::asprintf("\nDC Power:%.2f Calculated DC power:%.2f Min DC Voltage:%f",dcpowerf,(dccurrentf*dcvoltagef),mindcvoltagef));
         text.append(QString::asprintf("\nYouless energy:%d",youlessenergy));
+        text.append(QString::asprintf("\nSolar radiation:%f",lastradiation));
         qDebug()<<"maxpower:"<<maxpower<<"minpower:"<<minpower<<"avgpower:"<<(avgpowerf/avgpowercnt)<<"avg DC power:"<<(avgdcpowerf/avgpowercnt);
         qDebug()<<"maxdcpower:"<<maxdcpower<<"mindcpower:"<<mindcpower;
         qDebug()<<"efficiency:"<<efficiency;
@@ -315,23 +431,28 @@ void MainWindow::readSocketData()
         fn.write(QString::asprintf("%f,%f,%f,%f,",acphaseAVoltage,acphaseBVoltage,acphaseCVoltage,power_factor).toLatin1());
         fn.write(QString::asprintf("%s\n",times.toLatin1().data()).toLatin1());
         fn.close();
-        if(intrahour != lastintrahour && !opt->PVO_systemid.isEmpty())
+        if(intrahour != lastintrahour)
         {//upload
+            WundergroundDelay=210;                     //get solar radiation in 3.5 minutes
             lastintrahour=intrahour;
-            url+="&d=" + date;
-            url+="&t=" + time;
-            url+="&v1=" + QString::number(energy);
-            url+="&v2=" + QString::number((int)maxpower);
-            url+="&v3=" + QString::number(((int)youlessenergy)+energy);
-            url+="&v6=" + QString::number(mindcvoltagef);
-            url+="&v7=" + QString::number((int)maxpower);
-            url+="&v8=" + QString::number((int)minpower);
-            url+="&v9=" + QString::number((int)(avgpowerf/avgpowercnt));
-            url+="&v11=" + QString::number(efficiency);
-//            url+="&v9=" + QString::number((energy-lastenergy)*12);
-            qDebug()<<"url:"<<url;
-            ui->uploadlabel->setText(url+"\n");
-            pvoutputReply=manager->get(QNetworkRequest(QUrl(url)));
+            if(!opt->PVO_systemid.isEmpty())
+            {
+                url+="&d=" + date;
+                url+="&t=" + time;
+                url+="&v1=" + QString::number(energy);
+                url+="&v2=" + QString::number((int)maxpower);
+                url+="&v3=" + QString::number(((int)youlessenergy)+energy);
+                url+="&v6=" + QString::number(mindcvoltagef);
+                url+="&v7=" + QString::number((int)maxpower);
+                url+="&v8=" + QString::number((int)minpower);
+                url+="&v9=" + QString::number((int)(avgpowerf/avgpowercnt));
+                url+="&v11=" + QString::number(efficiency);
+                url+="&v12=" + QString::number(lastradiation);
+    //            url+="&v9=" + QString::number((energy-lastenergy)*12);
+                qDebug()<<"url:"<<url;
+                ui->uploadlabel->setText(url+"\n");
+                pvoutputReply=manager->get(QNetworkRequest(QUrl(url)));
+            }
             maxpower=maxdcpower=avgpowerf=avgdcpowerf=avgpowercnt=0;
             minpower=mindcpower=mindcvoltagef=1000000000;
             lastinteryoulessenergy=youlessenergy;

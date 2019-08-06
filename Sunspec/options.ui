@@ -17,6 +17,13 @@
    <item row="0" column="3">
     <widget class="QLineEdit" name="InverterAddress"/>
    </item>
+   <item row="1" column="1">
+    <widget class="QLabel" name="label_2">
+     <property name="text">
+      <string>Youless IP:port</string>
+     </property>
+    </widget>
+   </item>
    <item row="0" column="1">
     <widget class="QLabel" name="label">
      <property name="text">
@@ -33,16 +40,6 @@
       <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
      </property>
     </widget>
-   </item>
-   <item row="1" column="1">
-    <widget class="QLabel" name="label_2">
-     <property name="text">
-      <string>Youless IP:port</string>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="3">
-    <widget class="QLineEdit" name="YoulessAddress"/>
    </item>
    <item row="2" column="1" colspan="3">
     <widget class="QGroupBox" name="groupBox">
@@ -81,6 +78,19 @@
        <widget class="QLineEdit" name="pvo_key"/>
       </item>
      </layout>
+    </widget>
+   </item>
+   <item row="1" column="3">
+    <widget class="QLineEdit" name="YoulessAddress"/>
+   </item>
+   <item row="3" column="3">
+    <widget class="QLineEdit" name="wundergroundid"/>
+   </item>
+   <item row="3" column="1">
+    <widget class="QLabel" name="label_5">
+     <property name="text">
+      <string>Wunderground Station ID</string>
+     </property>
     </widget>
    </item>
   </layout>

@@ -21,7 +21,7 @@
 !define COMPANYNAME "OMT"
 !define DESCRIPTION ""
 !define VERSIONMAJOR 1
-!define VERSIONMINOR 1
+!define VERSIONMINOR 2
 !define VERSIONBUILD 0
 # These will be displayed by the "Click here for support information" link in "Add/Remove Programs"
 # It is possible to use "mailto:" links in here to open the email client
@@ -123,8 +123,8 @@ ${EndIf}
   File "${SOURCEFILES}\Qt5Network.dll"
   File "${SOURCEFILES}\Qt5Svg.dll"
   File "${SOURCEFILES}\Qt5Widgets.dll"
-  File "SSLlibs\x64\libeay32.dll"
-  File "SSLlibs\x64\ssleay32.dll"
+  File "SSLlibs\x64\libcrypto-1_1-x64.dll"
+  File "SSLlibs\x64\libssl-1_1-x64.dll"
 	  
   SetOutPath $INSTDIR\platforms
   File "${SOURCEFILES}\platforms\qwindows.dll"

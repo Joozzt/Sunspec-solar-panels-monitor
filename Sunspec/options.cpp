@@ -19,6 +19,8 @@ void Options::showEvent(QShowEvent*)
     ui->YoulessAddress->setText(YoulessIP);
     ui->pvo_id->setText(PVO_systemid);
     ui->pvo_key->setText(PVO_apikey);
+    ui->wundergroundid->setText(WundergroundID);
+
 }
 
 void Options::on_buttonBox_accepted()
@@ -31,4 +33,5 @@ void Options::on_buttonBox_accepted()
     }
     PVO_systemid=ui->pvo_id->text();
     PVO_apikey=ui->pvo_key->text();
+    WundergroundID=ui->wundergroundid->text();
 }
