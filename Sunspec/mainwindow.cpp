@@ -5,6 +5,7 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTimer>
+#include <QTime>
 
 
 #define YOULESS_IP "192.168.178.23:80"
@@ -57,7 +58,7 @@ MainWindow::MainWindow(QWidget *parent) :
     sdp=0;
     sunspecrp=youlesswp=0;
     lastradiation=0;
-    lastradiationtime=13*60;//-1;           //not valid yet, take only 1 last time of table
+    lastradiationtime=-1;           //not valid yet, take only 1 last time of table
     WundergroundDelay=0;
     requestingdata=false;
     polltimer=new QTimer(this);
@@ -103,8 +104,8 @@ void MainWindow::replyFinished(QNetworkReply* reply)
             float radiation;
             int hr,min;
             QByteArray data=reply->readAll();
-            data.append('\0');
             char* text=data.data();
+            data.append('\0');
             char * p=strstr(text,"history-table desktop-table");
             if(p)p=strstr(p,"<tbody");
             if(p)
@@ -132,7 +133,9 @@ void MainWindow::replyFinished(QNetworkReply* reply)
                         sscanf_s(m,"%d:%d",&hr,&min);
                         if(hr>=12)hr-=12;
                         if(pmtime)hr+=12;
+                        qDebug()<<"hr:"<<hr<<"min:"<<min;
                     }
+                    else qDebug()<<"No m";
                     char* solar=strstr(p,"w/m")-24;
                     if(solar)solar=strstr(solar,">");
                     if(solar)
@@ -146,20 +149,27 @@ void MainWindow::replyFinished(QNetworkReply* reply)
                         qDebug()<<hr<<min<<radiation;
                         if(lastradiationtime>0)
                         {
-                            if(radiationtime>lastradiationtime || (lastradiationtime-radiationtime)>15*60)      //only if new time later than last (or just after midnight)
+                            if(radiationtime>lastradiationtime || (lastradiationtime-radiationtime)>23*60)      //only if new time later than last (or just after midnight)
                             {
+                                qDebug()<<"Radiationtime:"<<radiationtime<<"lastradiationtime:"<<lastradiationtime;
                                 havenewdata=true;
                                 QDateTime dt=QDateTime::currentDateTime();
                                 QString date=dt.toString("yyyyMMdd");
                                 batchdata+=date+",";
-                                batchdata+=QString::asprintf("%02d:%02d,0,,,0,,,,,,,,%f;",hr,min,lastradiation);
+                                batchdata+=QString::asprintf("%02d:%02d,,,,,,,,,,,,%f;",hr,min,radiation);
                                 lastradiation=radiation;
                                 lastradiationtime=radiationtime;
                             }
                         }
                         else
-                        {
+                        {//wait until last entry in table, take that time as lastuploaded and upload only last one.
                             havenewdata=true;
+                            QDateTime dt=QDateTime::currentDateTime();
+                            QString date=dt.toString("yyyyMMdd");
+                            batchdata=date+",";
+                            batchdata+=QString::asprintf("%02d:%02d,,,,,,,,,,,,%f;",hr,min,radiation);
+                            lastradiation=radiation;
+                            lastradiationtime=-1;
                         }
                     }
                     p=pnext;
@@ -168,9 +178,13 @@ void MainWindow::replyFinished(QNetworkReply* reply)
 //only use last entry of the table, and only if time is later than previous time
             if(havenewdata)
             {
-                if(lastradiationtime<0)lastradiationtime=hr*60+min;
-                qDebug()<<"url:"<<url+batchdata;
-                if(batchdata.size())pvoutputReply=manager->get(QNetworkRequest(QUrl(url+batchdata)));
+                if(lastradiationtime<0)lastradiationtime=hr*60+min; //reset last time
+                if(batchdata.size())            //something to send ?
+                {
+                    qDebug()<<"url:"<<url+batchdata;
+                    pvoutputReply=manager->get(QNetworkRequest(QUrl(url+batchdata)));
+                    ui->uploadlabel->setText("uploaded solar radiation\n");
+                }
 #if 0
                 int radiationtime=hr*60+min;
                 qDebug()<<hr<<min<<radiation;
@@ -267,12 +281,15 @@ void MainWindow::mytimer()
     {
         if(WundergroundDelay<=0)
         {
-            WundergroundDelay=3600;     //set to a value, changed later
+            WundergroundDelay=15;     //set to a value, changed later
             QDateTime dt=QDateTime::currentDateTime();
             QString date=dt.toString("yyyy-MM-dd");
             QString url;
             url.sprintf("https://www.wunderground.com/dashboard/pws/%s/table/%s/%s/daily",opt->WundergroundID.toLatin1().data(),date.toLatin1().data(),date.toLatin1().data());
+            QNetworkRequest nr;
             qDebug()<<url;
+            nr.setUrl(QUrl(url));
+            nr.setAttribute(QNetworkRequest::CacheLoadControlAttribute,QNetworkRequest::AlwaysNetwork);
             WundergroundReply=manager->get(QNetworkRequest(QUrl(url)));
         }
         WundergroundDelay--;
@@ -390,7 +407,7 @@ void MainWindow::readSocketData()
         text.append(QString::asprintf("\nAC Power:%.1f DC Current:%.3f DC Voltage:%.2f, heat sink temp:%.1f",powerf,dccurrentf,dcvoltagef,hstemp));
         text.append(QString::asprintf("\nDC Power:%.2f Calculated DC power:%.2f Min DC Voltage:%f",dcpowerf,(dccurrentf*dcvoltagef),mindcvoltagef));
         text.append(QString::asprintf("\nYouless energy:%d",youlessenergy));
-        text.append(QString::asprintf("\nSolar radiation:%f",lastradiation));
+        text.append(QString::asprintf("\nSolar radiation:%f Lastradiationtime:%d",lastradiation,lastradiationtime));
         qDebug()<<"maxpower:"<<maxpower<<"minpower:"<<minpower<<"avgpower:"<<(avgpowerf/avgpowercnt)<<"avg DC power:"<<(avgdcpowerf/avgpowercnt);
         qDebug()<<"maxdcpower:"<<maxdcpower<<"mindcpower:"<<mindcpower;
         qDebug()<<"efficiency:"<<efficiency;
@@ -417,6 +434,7 @@ void MainWindow::readSocketData()
             qDebug()<<"date:"<<date<<"Lastdate:"<<lastdate;
             lastenergy=energy;
             lastyoulessenergy=youlessenergy;
+            lastradiationtime=-1;
             lastdate=date;
             settings->setValue("Last Date",lastdate);
             settings->setValue("Last Energy",lastenergy);
@@ -447,7 +465,7 @@ void MainWindow::readSocketData()
                 url+="&v8=" + QString::number((int)minpower);
                 url+="&v9=" + QString::number((int)(avgpowerf/avgpowercnt));
                 url+="&v11=" + QString::number(efficiency);
-                url+="&v12=" + QString::number(lastradiation);
+//                url+="&v12=" + QString::number(lastradiation);                //done in separate batch upload
     //            url+="&v9=" + QString::number((energy-lastenergy)*12);
                 qDebug()<<"url:"<<url;
                 ui->uploadlabel->setText(url+"\n");
