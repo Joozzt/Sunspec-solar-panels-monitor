@@ -427,7 +427,8 @@ void MainWindow::readSocketData()
         QString date=dt.toString("yyyyMMdd");
         QString time=dt.toString("hh:mm");
         QString times=dt.toString("hh:mm:ss");
-        QFile fn(date+".csv");
+        QString path=QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)+"/";
+        QFile fn(path+date+".csv");
         fn.open(QIODevice::WriteOnly|QIODevice::Append);
         if(date.compare(lastdate))
         {
